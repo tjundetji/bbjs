@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Babylon.js GunZ-like Prototype - Dude Model</title>
+  <!-- Load Babylon.js from the CDN -->
+  <script src="https://cdn.babylonjs.com/babylon.js"></script>
+  <style>
+    html, body { width:100%; height:100%; margin:0; overflow:hidden; }
+    #renderCanvas { width:100%; height:100%; touch-action: none; }
+  </style>
+</head>
+<body>
+  <canvas id="renderCanvas"></canvas>
+
+  <script>
+    const canvas = document.getElementById("renderCanvas");
+    const engine = new BABYLON.Engine(canvas, true);
+
+    const createScene = function() {
+      const scene = new BABYLON.Scene(engine);
+      scene.clearColor = new BABYLON.Color4(0.8, 0.8, 0.8, 1);
+
+      // Add a hemispheric light and ground.
+      const light = new BABYLON.HemisphericLight("light", new BABYLON.Vector3(0, 1, 0), scene);
+      const ground = BABYLON.MeshBuilder.CreateGround("ground", { width: 50, height: 50 }, scene);
+
+      // Variables to store the Dude model and its skeleton.
+      let character = null;
+      let skeleton = null;
+
+      // Load the Dude model.
+      BABYLON.SceneLoader.ImportMesh(
+        "",
+        "https://assets.babylonjs.com/meshes/Dude/",
+        "Dude.babylon",
+        scene,
+        function(meshes, particleSystems, skeletons) {
+          console.log("Meshes loaded:", meshes);
+          if (meshes.length > 0) {
+            // Use the first mesh as the main character.
+            character = meshes[0];
+            character.name = "character";
+            // Adjust scaling if needed.
+            character.scaling = new BABYLON.Vector3(0.2, 0.2, 0.2);
+            // Position the character so that its feet are on the ground.
+            character.position = new BABYLON.Vector3(0, 0, 0);
+          }
+          if (skeletons.length > 0) {
+            skeleton = skeletons[0];
+            console.log("Skeleton loaded:", skeleton);
+          }
+          // Start with an idle animation (adjust frame range if needed).
+          if (skeleton) {
+            console.log("Starting idle animation");
+            scene.beginAnimation(skeleton, 0, 100, true);
+          }
+        },
+        null,
+        function(scene, message, exception) {
+          console.error("Failed to load Dude model:", message, exception);
+        }
+      );
+
+      // Set up a FollowCamera.
+      const camera = new BABYLON.FollowCamera("followCam", new BABYLON.Vector3(0, 10, -20), scene);
+      camera.heightOffset = 4;
+      camera.radius = 10;
+      camera.rotationOffset = 180;
+      camera.cameraAcceleration = 0.05;
+      camera.maxCameraSpeed = 10;
+      camera.attachControl(canvas, true);
+
+      // Input handling.
+      const inputMap = {};
+      scene.onKeyboardObservable.add((kbInfo) => {
+        if (kbInfo.type === BABYLON.KeyboardEventTypes.KEYDOWN) {
+          inputMap[kbInfo.event.key.toLowerCase()] = true;
+        } else if (kbInfo.type === BABYLON.KeyboardEventTypes.KEYUP) {
+          inputMap[kbInfo.event.key.toLowerCase()] = false;
+        }
+      });
+
+      let isRunning = false;
+      scene.onBeforeRenderObservable.add(() => {
+        if (!character) return; // Wait until the model loads.
+
+        const speed = 0.2;
+        let moveX = 0;
+        let moveZ = 0;
+        if (inputMap["w"]) { moveZ += speed; }
+        if (inputMap["s"]) { moveZ -= speed; }
+        if (inputMap["a"]) { moveX -= speed; }
+        if (inputMap["d"]) { moveX += speed; }
+
+        // Update character position.
+        character.position.x += moveX;
+        character.position.z += moveZ;
+
+        // Update camera target.
+        camera.lockedTarget = character;
+
+        // Smoothly rotate the character if moving.
+        if (moveX !== 0 || moveZ !== 0) {
+          const desiredRotation = Math.atan2(moveX, moveZ);
+          character.rotation.y = BABYLON.Scalar.LerpAngle(character.rotation.y, desiredRotation, 0.1);
+        }
+
+        // Switch animations based on movement.
+        if (skeleton) {
+          if ((moveX !== 0 || moveZ !== 0) && !isRunning) {
+            // Start running animation (example frame range: 100 to 160; adjust as needed).
+            scene.beginAnimation(skeleton, 100, 160, true);
+            isRunning = true;
+          } else if (moveX === 0 && moveZ === 0 && isRunning) {
+            // Revert to idle animation.
+            scene.beginAnimation(skeleton, 0, 100, true);
+            isRunning = false;
+          }
+        }
+      });
+
+      return scene;
+    };
+
+    const scene = createScene();
+    engine.runRenderLoop(() => scene.render());
+    window.addEventListener("resize", () => engine.resize());
+  </script>
+</body>
+</html>
