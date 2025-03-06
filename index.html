@@ -1,132 +1,159 @@
-<!doctype html>
+<!DOCTYPE html>
 <html>
-    <head>
-        <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+  <head>
+    <meta charset="utf-8" />
+    <title>BabylonJS Third-Person Shooter with Physics (CannonJS) - WASD Fix</title>
+    <script src="https://cdn.babylonjs.com/babylon.js"></script>
+    <!-- Include CannonJS from CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cannon.js/0.6.2/cannon.min.js"></script>
+  </head>
+  <body>
+    <canvas id="renderCanvas" style="width: 100%; height: 100vh;"></canvas>
+    <script>
+      const canvas = document.getElementById("renderCanvas");
+      const engine = new BABYLON.Engine(canvas, true);
 
-        <title>Babylon.js sample code</title>
+      const createScene = function () {
+        const scene = new BABYLON.Scene(engine);
+        // Enable physics using CannonJS.
+        scene.enablePhysics(new BABYLON.Vector3(0, -9.81, 0), new BABYLON.CannonJSPlugin());
 
-        <!-- Babylon.js -->
-        <script src="https://cdnjs.cloudflare.com/ajax/libs/dat-gui/0.6.2/dat.gui.min.js"></script>
-        <script src="https://assets.babylonjs.com/generated/Assets.js"></script>
-        <script src="https://cdn.babylonjs.com/recast.js"></script>
-        <script src="https://cdn.babylonjs.com/ammo.js"></script>
-        <script src="https://cdn.babylonjs.com/havok/HavokPhysics_umd.js"></script>
-        <script src="https://cdn.babylonjs.com/cannon.js"></script>
-        <script src="https://cdn.babylonjs.com/Oimo.js"></script>
-        <script src="https://cdn.babylonjs.com/earcut.min.js"></script>
-        <script src="https://cdn.babylonjs.com/babylon.js"></script>
-        <script src="https://cdn.babylonjs.com/materialsLibrary/babylonjs.materials.min.js"></script>
-        <script src="https://cdn.babylonjs.com/proceduralTexturesLibrary/babylonjs.proceduralTextures.min.js"></script>
-        <script src="https://cdn.babylonjs.com/postProcessesLibrary/babylonjs.postProcess.min.js"></script>
-        <script src="https://cdn.babylonjs.com/loaders/babylonjs.loaders.js"></script>
-        <script src="https://cdn.babylonjs.com/serializers/babylonjs.serializers.min.js"></script>
-        <script src="https://cdn.babylonjs.com/gui/babylon.gui.min.js"></script>
-        <script src="https://cdn.babylonjs.com/addons/babylonjs.addons.min.js"></script>
-        <script src="https://cdn.babylonjs.com/inspector/babylon.inspector.bundle.js"></script>
+        // Create a basic hemispheric light.
+        const light = new BABYLON.HemisphericLight("light", new BABYLON.Vector3(0, 1, 0), scene);
 
-        <style>
-            html,
-            body {
-                overflow: hidden;
-                width: 100%;
-                height: 100%;
-                margin: 0;
-                padding: 0;
-            }
+        // Create the ground.
+        const ground = BABYLON.MeshBuilder.CreateGround("ground", { width: 50, height: 50 }, scene);
+        ground.position.y = 0;
+        ground.physicsImpostor = new BABYLON.PhysicsImpostor(
+          ground,
+          BABYLON.PhysicsImpostor.BoxImpostor,
+          { mass: 0, restitution: 0.1 },
+          scene
+        );
 
-            #renderCanvas {
-                width: 100%;
-                height: 100%;
-                touch-action: none;
-            }
+        // Create a few houses.
+        const numHouses = 5;
+        for (let i = 0; i < numHouses; i++) {
+          const house = BABYLON.MeshBuilder.CreateBox("house" + i, { size: 2 }, scene);
+          house.position = new BABYLON.Vector3((Math.random() - 0.5) * 40, 1, (Math.random() - 0.5) * 40);
+          house.physicsImpostor = new BABYLON.PhysicsImpostor(
+            house,
+            BABYLON.PhysicsImpostor.BoxImpostor,
+            { mass: 0, restitution: 0.1 },
+            scene
+          );
 
-            #canvasZone {
-                width: 100%;
-                height: 100%;
-            }
-        </style>
-    </head>
-    <body>
-        <div id="canvasZone"><canvas id="renderCanvas"></canvas></div>
-        <script>
-                    var canvas = document.getElementById("renderCanvas");
+          const roof = BABYLON.MeshBuilder.CreateCylinder("roof" + i, {
+            diameter: 2.2,
+            height: 1,
+            tessellation: 4
+          }, scene);
+          roof.position = house.position.add(new BABYLON.Vector3(0, 1.5, 0));
+          roof.rotation.y = Math.PI / 4;
+          roof.physicsImpostor = new BABYLON.PhysicsImpostor(
+            roof,
+            BABYLON.PhysicsImpostor.CylinderImpostor,
+            { mass: 0, restitution: 0.1 },
+            scene
+          );
+        }
 
-                    var startRenderLoop = function (engine, canvas) {
-                        engine.runRenderLoop(function () {
-                            if (sceneToRender && sceneToRender.activeCamera) {
-                                sceneToRender.render();
-                            }
-                        });
-                    }
+        // Create the player as a box.
+        const player = BABYLON.MeshBuilder.CreateBox("player", { size: 1 }, scene);
+        player.position = new BABYLON.Vector3(0, 0.5, 0);
+        player.physicsImpostor = new BABYLON.PhysicsImpostor(
+          player,
+          BABYLON.PhysicsImpostor.BoxImpostor,
+          { mass: 1, restitution: 0.0 },
+          scene
+        );
 
-                    var engine = null;
-        var scene = null;
-        var sceneToRender = null;
-        var createDefaultEngine = function() { return new BABYLON.Engine(canvas, true, { preserveDrawingBuffer: true, stencil: true,  disableWebGL2Support: false}); };
-        var createScene = function () {
-    // This creates a basic Babylon Scene object (non-mesh)
-    var scene = new BABYLON.Scene(engine);
+        // Wait for the physics body to be created, then lock its rotation.
+        var observer = scene.onBeforeRenderObservable.add(() => {
+          if (player.physicsImpostor.physicsBody && player.physicsImpostor.physicsBody.angularFactor) {
+            // Lock rotation on all axes.
+            player.physicsImpostor.physicsBody.angularFactor.set(0, 0, 0);
+            // Remove the observer so we don't repeat this every frame.
+            scene.onBeforeRenderObservable.remove(observer);
+          }
+        });
 
-    // This creates and positions a free camera (non-mesh)
-    var camera = new BABYLON.FreeCamera("camera1", new BABYLON.Vector3(0, 5, -10), scene);
+        // Create a UniversalCamera for a third-person view.
+        const camera = new BABYLON.UniversalCamera("camera", new BABYLON.Vector3(0, 3, -5), scene);
+        camera.attachControl(canvas, true);
+        camera.keysUp = [];
+        camera.keysDown = [];
+        camera.keysLeft = [];
+        camera.keysRight = [];
 
-    // This targets the camera to scene origin
-    camera.setTarget(BABYLON.Vector3.Zero());
+        // Use document-level listeners for WASD and jump input.
+        const inputMap = {};
+        document.addEventListener("keydown", (evt) => {
+          inputMap[evt.key.toLowerCase()] = true;
+          // Request pointer lock on key press.
+          if (document.pointerLockElement !== canvas) {
+            canvas.requestPointerLock();
+          }
+        });
+        document.addEventListener("keyup", (evt) => {
+          inputMap[evt.key.toLowerCase()] = false;
+        });
 
-    // This attaches the camera to the canvas
-    camera.attachControl(canvas, true);
+        // Movement parameters.
+        const moveSpeed = 150;     // units per second
+        const jumpImpulse = 10;   // upward impulse
 
-    // This creates a light, aiming 0,1,0 - to the sky (non-mesh)
-    var light = new BABYLON.HemisphericLight("light", new BABYLON.Vector3(0, 1, 0), scene);
+        scene.onBeforeRenderObservable.add(() => {
+          const deltaTime = engine.getDeltaTime() / 1000; // in seconds
+          const yaw = camera.rotation.y;
+          const pitch = camera.rotation.x;
+          // Set player's facing direction.
+          player.rotation.y = yaw;
 
-    // Default intensity is 1. Let's dim the light a small amount
-    light.intensity = 0.7;
+          // Compute movement direction.
+          let forward = new BABYLON.Vector3(Math.sin(yaw), 0, Math.cos(yaw));
+          let right = new BABYLON.Vector3(Math.cos(yaw), 0, -Math.sin(yaw));
+          let moveDirection = BABYLON.Vector3.Zero();
+          if (inputMap["w"]) moveDirection = moveDirection.add(forward);
+          if (inputMap["s"]) moveDirection = moveDirection.add(forward.scale(-1));
+          if (inputMap["a"]) moveDirection = moveDirection.add(right.scale(-1));
+          if (inputMap["d"]) moveDirection = moveDirection.add(right);
 
+          if (moveDirection.length() > 0) {
+            moveDirection = moveDirection.normalize().scale(moveSpeed * deltaTime);
+            // Preserve vertical velocity.
+            let currentVelocity = player.physicsImpostor.getLinearVelocity();
+            player.physicsImpostor.setLinearVelocity(new BABYLON.Vector3(
+              moveDirection.x,
+              currentVelocity.y,
+              moveDirection.z
+            ));
+          }
 
+          // Jump: if space is pressed and vertical velocity is near zero.
+          let currentVelocity = player.physicsImpostor.getLinearVelocity();
+          if (inputMap[" "] && Math.abs(currentVelocity.y) < 0.1) {
+            player.physicsImpostor.applyImpulse(
+              new BABYLON.Vector3(0, jumpImpulse, 0),
+              player.getAbsolutePosition()
+            );
+          }
 
-    // Our built-in 'ground' shape.
-    var ground = BABYLON.MeshBuilder.CreateGround("ground", {width: 6, height: 6}, scene);
-    const groundMaterial = new BABYLON.StandardMaterial("Ground Material", scene);
-groundMaterial.diffuseColor = BABYLON.Color3.Red();
-let groundTexture = new BABYLON.Texture(Assets.textures.checkerboard_basecolor_png.path, scene);
-groundMaterial.diffuseTexture = groundTexture;
-ground.material = groundMaterial;
+          // Update camera position to follow the player.
+          const followDistance = 10;
+          const cameraHeight = 1;
+          const offsetX = -followDistance * Math.sin(yaw) * Math.cos(pitch);
+          const offsetZ = -followDistance * Math.cos(yaw) * Math.cos(pitch);
+          const offsetY = cameraHeight + followDistance * Math.sin(pitch);
+          camera.position = player.position.add(new BABYLON.Vector3(offsetX, offsetY, offsetZ));
+        });
 
-BABYLON.SceneLoader.ImportMesh("", "scenes/Dude/", "dude.babylon", scene, function (newMeshes, particleSystems, skeletons) {
-    var hero = newMeshes[0];
-    hero.scaling.scaleInPlace(0.03);
-    // scene.beginAnimation(skeletons[0], 0, 100, true, 1.0);
-    hero.position.x = 2;
-});
+        return scene;
+      };
 
-    return scene;
-};
-                window.initFunction = async function() {
-                    
-                    
-                    
-                    var asyncEngineCreation = async function() {
-                        try {
-                        return createDefaultEngine();
-                        } catch(e) {
-                        console.log("the available createEngine function failed. Creating the default engine instead");
-                        return createDefaultEngine();
-                        }
-                    }
-
-                    window.engine = await asyncEngineCreation();
-                    
-                    
-        if (!engine) throw 'engine should not be null.';
-        startRenderLoop(engine, canvas);
-        window.scene = createScene();};
-        initFunction().then(() => {sceneToRender = scene
-                    });
-
-                    // Resize
-                    window.addEventListener("resize", function () {
-                        engine.resize();
-                    });
-        </script>
-    </body>
+      const scene = createScene();
+      engine.runRenderLoop(() => scene.render());
+      window.addEventListener("resize", () => engine.resize());
+    </script>
+  </body>
 </html>
